@@ -30,7 +30,7 @@ from urllib.parse import unquote, urlparse
 
 
 SERVER_NAME = "mac-mail"
-SERVER_VERSION = "0.6.2"
+SERVER_VERSION = "0.6.3"
 UPDATE_REPO_URL = os.environ.get("MAC_MAIL_PLUGIN_REPO", "https://github.com/KeystoneScience/mac-mail-codex-plugin.git")
 UPDATE_BRANCH = os.environ.get("MAC_MAIL_PLUGIN_BRANCH", "main")
 MAIL_ROOT = Path.home() / "Library" / "Mail"

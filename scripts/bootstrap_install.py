@@ -123,7 +123,8 @@ def refresh_codex_caches(home: Path, repo_url: str) -> list[dict[str, Any]]:
             continue
         remote = run(["git", "-C", str(candidate), "config", "--get", "remote.origin.url"], timeout=15)
         remote_url = remote.stdout.strip()
-        if remote.returncode != 0 or (repo_url not in {remote_url, remote_url.removesuffix(".git")}):
+        remote_without_suffix = remote_url[:-4] if remote_url.endswith(".git") else remote_url
+        if remote.returncode != 0 or (repo_url not in {remote_url, remote_without_suffix}):
             refreshed.append({"path": str(candidate), "action": "skipped_different_remote", "remote": remote_url or None})
             continue
         dirty = run(["git", "-C", str(candidate), "status", "--short", "--untracked-files=no"], timeout=15)

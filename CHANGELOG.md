@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.3 - 2026-04-29
+
+- Fixed bootstrap cache refresh compatibility with older macOS `python3` versions.
+
 ## 0.6.2 - 2026-04-29
 
 - Hardened bootstrap installs by refreshing any existing Git-backed Codex plugin cache checkout for this plugin.
