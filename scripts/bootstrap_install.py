@@ -110,6 +110,46 @@ source = "{home}"
     return config_path, changes
 
 
+def refresh_codex_caches(home: Path, repo_url: str) -> list[dict[str, Any]]:
+    cache_root = home / ".codex" / "plugins" / "cache"
+    if not cache_root.exists():
+        return []
+    refreshed: list[dict[str, Any]] = []
+    for candidate in sorted(cache_root.glob(f"*/{PLUGIN_NAME}/*")):
+        if not candidate.is_dir():
+            continue
+        if not (candidate / ".git").exists():
+            refreshed.append({"path": str(candidate), "action": "skipped_non_git_cache"})
+            continue
+        remote = run(["git", "-C", str(candidate), "config", "--get", "remote.origin.url"], timeout=15)
+        remote_url = remote.stdout.strip()
+        if remote.returncode != 0 or (repo_url not in {remote_url, remote_url.removesuffix(".git")}):
+            refreshed.append({"path": str(candidate), "action": "skipped_different_remote", "remote": remote_url or None})
+            continue
+        dirty = run(["git", "-C", str(candidate), "status", "--short", "--untracked-files=no"], timeout=15)
+        if dirty.stdout.strip():
+            refreshed.append({"path": str(candidate), "action": "skipped_dirty_cache"})
+            continue
+        fetch = run(["git", "-C", str(candidate), "fetch", "--quiet", "origin", "main"], timeout=120)
+        if fetch.returncode != 0:
+            refreshed.append({"path": str(candidate), "action": "fetch_failed", "error": fetch.stderr.strip() or fetch.stdout.strip()})
+            continue
+        before = run(["git", "-C", str(candidate), "rev-parse", "HEAD"], timeout=15).stdout.strip()
+        pull = run(["git", "-C", str(candidate), "pull", "--ff-only", "origin", "main"], timeout=120)
+        after = run(["git", "-C", str(candidate), "rev-parse", "HEAD"], timeout=15).stdout.strip()
+        refreshed.append(
+            {
+                "path": str(candidate),
+                "action": "updated_cache" if before != after else "cache_already_current",
+                "before": before or None,
+                "after": after or None,
+                "ok": pull.returncode == 0,
+                "error": None if pull.returncode == 0 else pull.stderr.strip() or pull.stdout.strip(),
+            }
+        )
+    return refreshed
+
+
 def ensure_git_checkout(target: Path, repo_url: str, *, replace_existing: bool = False) -> dict[str, Any]:
     source_root = plugin_root().resolve()
     target = target.resolve()
@@ -201,6 +241,7 @@ def payload_for(args: argparse.Namespace) -> dict[str, Any]:
         return {"ok": False, "install": install}
     marketplace_path, marketplace_name = ensure_marketplace(home, args.marketplace_name)
     config_path, config_changes = ensure_codex_config(home, marketplace_name)
+    cache_refresh = refresh_codex_caches(home, args.repo)
     doctor_result = None if args.skip_doctor else run_doctor(target)
     ok = install.get("error") is None and (doctor_result is None or doctor_result.get("ok", False))
     return {
@@ -209,12 +250,14 @@ def payload_for(args: argparse.Namespace) -> dict[str, Any]:
         "plugin_target": str(target),
         "marketplace": {"name": marketplace_name, "path": str(marketplace_path)},
         "codex_config": {"path": str(config_path), "changes": config_changes},
+        "codex_cache_refresh": cache_refresh,
         "doctor": doctor_result,
         "permissions_next_steps": [
             "Open System Settings > Privacy & Security > Full Disk Access and enable Codex.",
             "If you test from Terminal or iTerm, grant Full Disk Access to that app too.",
             "Mail.app Automation permission is requested by macOS the first time a draft/open/send tool controls Mail.",
             "Restart Codex after changing permissions.",
+            "Restart Codex after plugin installs or updates so the native tool schema reloads.",
         ],
         "try_in_codex": [
             "Run mail_permissions_check. If Full Disk Access is blocked, rerun it with open_full_disk_access=true.",

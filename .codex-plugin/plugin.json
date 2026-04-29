@@ -1,6 +1,6 @@
 {
   "name": "mac-mail",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Local Apple Mail access for efficient indexed search, optional private body search, easy mailbox targeting, permission diagnostics, self-update checks, inbox overviews, bounded reads, attachment handling, visible drafts, rich .eml draft prep, and approval-gated sending from this Mac.",
   "author": {
     "name": "Nate Stone",

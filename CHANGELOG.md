@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.2 - 2026-04-29
+
+- Hardened bootstrap installs by refreshing any existing Git-backed Codex plugin cache checkout for this plugin.
+- Added explicit restart guidance after installs or updates so native tool schemas reload.
+
 ## 0.6.1 - 2026-04-29
 
 - Fixed Codex native plugin loading by removing a top-level `anyOf` from `mail_create_draft`.

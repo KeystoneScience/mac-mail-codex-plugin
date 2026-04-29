@@ -25,6 +25,8 @@ fi
 python3 ~/plugins/mac-mail/scripts/bootstrap_install.py
 ~/plugins/mac-mail/scripts/run_doctor.sh
 
+Restart Codex after install/update so the native Mac Mail tool schema reloads.
+
 Then ask me to grant the required macOS permissions:
 - Full Disk Access for Codex so the plugin can read Apple Mail's local index and downloaded messages.
 - Full Disk Access for Terminal or iTerm too if you tested the plugin from a shell.
@@ -77,6 +79,7 @@ The bootstrap script:
 - keeps the plugin at `~/plugins/mac-mail`;
 - creates or updates `~/.agents/plugins/marketplace.json`;
 - enables `mac-mail@<local-marketplace>` in `~/.codex/config.toml`;
+- refreshes any existing Git-backed Codex plugin cache checkout for this plugin;
 - runs a non-destructive doctor check;
 - prints the exact permission steps to finish setup.
 

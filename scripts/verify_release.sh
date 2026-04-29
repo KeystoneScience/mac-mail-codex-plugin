@@ -26,7 +26,7 @@ bash -n scripts/run_mcp.sh scripts/run_doctor.sh
 
 printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n' \
   | "$PYTHON_BIN" scripts/mac_mail_mcp.py \
-  | "$PYTHON_BIN" -c 'import json,sys; lines=sys.stdin.read().splitlines(); init=json.loads(lines[0]); tools=json.loads(lines[1])["result"]["tools"]; assert init["result"]["serverInfo"]["version"] == "0.6.1"; assert len(tools) >= 22; print(f"JSON-RPC OK: {len(tools)} tools")'
+  | "$PYTHON_BIN" -c 'import json,sys; lines=sys.stdin.read().splitlines(); init=json.loads(lines[0]); tools=json.loads(lines[1])["result"]["tools"]; assert init["result"]["serverInfo"]["version"] == "0.6.2"; assert len(tools) >= 22; print(f"JSON-RPC OK: {len(tools)} tools")'
 
 if [[ "$run_live" == "true" ]]; then
   "$PYTHON_BIN" scripts/doctor.py --require-mail
