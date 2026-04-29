@@ -1,0 +1,50 @@
+{
+  "name": "mac-mail",
+  "version": "0.6.0",
+  "description": "Local Apple Mail access for efficient indexed search, optional private body search, easy mailbox targeting, permission diagnostics, self-update checks, inbox overviews, bounded reads, attachment handling, visible drafts, rich .eml draft prep, and approval-gated sending from this Mac.",
+  "author": {
+    "name": "Nate Stone",
+    "email": "nate@dittodub.com",
+    "url": "https://www.dittodub.com/"
+  },
+  "homepage": "https://www.apple.com/macos/mail/",
+  "repository": "https://github.com/KeystoneScience/mac-mail-codex-plugin",
+  "license": "MIT",
+  "keywords": [
+    "apple-mail",
+    "macos",
+    "email",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Mac Mail",
+    "shortDescription": "Use local Apple Mail",
+    "longDescription": "Use local Apple Mail data on this Mac to inspect accounts and mailboxes, search indexed messages across configured inboxes or exact selected mailboxes, diagnose and open macOS permission settings, check/pull GitHub plugin updates, optionally build a private local FTS body cache, generate metadata-only inbox overviews, read downloaded messages and local threads with bounded body output, export reviewed attachments, create visible new/reply/forward drafts or unsent rich .eml draft files, inspect outgoing drafts, and send only through an explicit confirmation gate.",
+    "developerName": "Nate Stone",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://www.apple.com/macos/mail/",
+    "privacyPolicyURL": "https://www.apple.com/legal/privacy/",
+    "termsOfServiceURL": "https://www.apple.com/legal/internet-services/terms/site.html",
+    "defaultPrompt": [
+      "Scan recent local Apple Mail inboxes, ignore obvious noise, and bucket what needs attention",
+      "Check Mac Mail plugin permissions and open Full Disk Access settings if needed",
+      "Check whether the Mac Mail plugin has updates available on GitHub",
+      "List Apple Mail mailboxes and search inside one exact mailbox_id",
+      "Search downloaded Apple Mail bodies with the private local body index",
+      "Read the latest local Apple Mail thread, summarize the ask, and draft a visible reply without sending",
+      "Find unread messages across local accounts and state scope plus confidence",
+      "Prepare an unsent rich .eml draft file for visible review in Mail"
+    ],
+    "brandColor": "#0A84FF",
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/icon.svg",
+    "screenshots": []
+  }
+}

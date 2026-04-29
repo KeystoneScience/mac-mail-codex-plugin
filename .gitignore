@@ -1,0 +1,19 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+dist/
+build/
+*.tar.gz
+*.zip
+
+# Private local plugin data belongs under ~/Library/Application Support,
+# but keep these out if someone overrides paths while testing.
+body-search.sqlite3*
+operation-log.jsonl
+Draft Files/
+Exports/

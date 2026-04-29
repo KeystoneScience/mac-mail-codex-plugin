@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "mac-mail": {
+      "command": "bash",
+      "args": [
+        "./scripts/run_mcp.sh"
+      ],
+      "cwd": "."
+    }
+  }
+}
