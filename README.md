@@ -1,5 +1,9 @@
 # Mac Mail Codex Plugin
 
+<p align="center">
+  <img src="assets/readme-hero.png" alt="Mac Mail Codex plugin hero showing local mail flowing into an assistant interface" width="100%">
+</p>
+
 ## Copy/Paste Install Prompt For Codex
 
 Paste this into Codex on a Mac:
