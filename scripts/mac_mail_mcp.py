@@ -30,7 +30,7 @@ from urllib.parse import unquote, urlparse
 
 
 SERVER_NAME = "mac-mail"
-SERVER_VERSION = "0.6.0"
+SERVER_VERSION = "0.6.1"
 UPDATE_REPO_URL = os.environ.get("MAC_MAIL_PLUGIN_REPO", "https://github.com/KeystoneScience/mac-mail-codex-plugin.git")
 UPDATE_BRANCH = os.environ.get("MAC_MAIL_PLUGIN_BRANCH", "main")
 MAIL_ROOT = Path.home() / "Library" / "Mail"
@@ -150,6 +150,18 @@ def clamp_limit(value: Any, default: int = 20, maximum: int = 100) -> int:
     except (TypeError, ValueError):
         limit = default
     return max(1, min(limit, maximum))
+
+
+def parse_offset_arg(value: Any, name: str = "offset") -> int:
+    if value in (None, ""):
+        return 0
+    try:
+        offset = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ToolError(f"{name} must be a non-negative integer") from exc
+    if offset < 0:
+        raise ToolError(f"{name} must be a non-negative integer")
+    return offset
 
 
 def parse_int_arg(value: Any, name: str) -> int:
@@ -841,7 +853,7 @@ def list_accounts(args: dict[str, Any]) -> dict[str, Any]:
 
 def list_mailboxes(args: dict[str, Any]) -> dict[str, Any]:
     account_uuid = str(args.get("account_uuid") or args.get("account") or "").strip()
-    role_filter = str(args.get("role") or "").strip().lower()
+    role_filter = str(args.get("role") or args.get("mailbox_role") or "").strip().lower()
     query = str(args.get("query") or "").strip().lower()
     name_filter = str(args.get("name") or args.get("mailbox_name") or "").strip().lower()
     path_filter = str(args.get("path") or args.get("mailbox_path") or "").strip().lower()
@@ -1037,7 +1049,11 @@ def inbox_overview(args: dict[str, Any]) -> dict[str, Any]:
 
 def search_messages(args: dict[str, Any]) -> dict[str, Any]:
     query = str(args.get("query") or "").strip()
-    limit = clamp_limit(args.get("limit"), 20, 100)
+    limit = clamp_limit(args.get("max_results", args.get("limit")), 20, 100)
+    offset = parse_offset_arg(
+        args.get("offset", args.get("page_token") or args.get("next_page_token")),
+        "offset/page_token",
+    )
     unread_only = bool(args.get("unread_only", False))
     flagged_only = bool(args.get("flagged_only", False))
     include_deleted = bool(args.get("include_deleted", False))
@@ -1074,6 +1090,8 @@ def search_messages(args: dict[str, Any]) -> dict[str, Any]:
             return {
                 "messages": [],
                 "limit": limit,
+                "offset": offset,
+                "next_page_token": None,
                 "query": query,
                 "notes": ["No local Apple Mail mailboxes matched the requested filters."],
             }
@@ -1152,19 +1170,27 @@ def search_messages(args: dict[str, Any]) -> dict[str, Any]:
             LEFT JOIN mailboxes mb ON mb.ROWID = m.mailbox
             {where_sql}
             ORDER BY m.date_received DESC, m.ROWID DESC
-            LIMIT ?
+            LIMIT ? OFFSET ?
         """
-        params.append(limit)
-        rows = [enrich_message(row) for row in conn.execute(sql, params)]
+        params.extend([limit + 1, offset])
+        fetched = [enrich_message(row) for row in conn.execute(sql, params)]
+    has_more = len(fetched) > limit
+    rows = fetched[:limit]
+    next_offset = offset + limit if has_more else None
     return {
         "messages": rows,
+        "count": len(rows),
         "limit": limit,
+        "offset": offset,
+        "next_offset": next_offset,
+        "next_page_token": str(next_offset) if next_offset is not None else None,
         "query": query,
         "notes": [
             "Search uses Apple Mail's local readonly Envelope Index.",
             "Default searches exclude local Junk/Spam mailboxes unless include_spam=true or mailbox_role='junk'.",
             "Target a specific mailbox with mailbox_id from mail_list_mailboxes for the least ambiguous search.",
             "Friendly mailbox filters are also available: mailbox_name, mailbox_path, mailbox_role, account_uuid, and mailbox.",
+            "For Gmail-style paging, pass max_results and then pass next_page_token as page_token on the next call.",
             "Date filtering and ordering use Mail's date_received field for indexed performance.",
             "Bodies require mail_read_message and are only available for downloaded .emlx files.",
         ],
@@ -2535,7 +2561,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         "handler": list_accounts,
     },
     "mail_list_mailboxes": {
-        "description": "List local Apple Mail mailboxes across accounts, with friendly filters and exact search arguments for each mailbox.",
+        "description": "List local Apple Mail mailboxes across accounts, with friendly role/account filters and exact search arguments for each mailbox.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -2544,6 +2570,11 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "role": {
                     "type": "string",
                     "enum": ["inbox", "sent", "drafts", "junk", "trash", "archive", "outbox", "other"],
+                },
+                "mailbox_role": {
+                    "type": "string",
+                    "enum": ["inbox", "sent", "drafts", "junk", "trash", "archive", "outbox", "other"],
+                    "description": "Alias for role, useful when copying filters from mail_search_messages.",
                 },
                 "query": {"type": "string", "description": "Case-insensitive fuzzy match against mailbox name, path, URL, or role."},
                 "name": {"type": "string", "description": "Exact case-insensitive mailbox display name, for example Inbox or Sent Mail."},
@@ -2575,19 +2606,33 @@ TOOLS: dict[str, dict[str, Any]] = {
         "handler": inbox_overview,
     },
     "mail_search_messages": {
-        "description": "Search local Apple Mail metadata using Mail's readonly Envelope Index.",
+        "description": "Search local Apple Mail metadata newest-first using Mail's readonly Envelope Index. Use mailbox_role='inbox' for Gmail-style inbox searches, mailbox_id for exact targeting, and page_token for follow-up pages.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "query": {"type": "string"},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
+                "max_results": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100,
+                    "default": 20,
+                    "description": "Alias for limit; matches Gmail connector naming.",
+                },
+                "offset": {"type": "integer", "minimum": 0, "default": 0},
+                "page_token": {
+                    "type": "string",
+                    "description": "Numeric offset token from next_page_token in a prior result.",
+                },
+                "next_page_token": {
+                    "type": "string",
+                    "description": "Alias for page_token when replaying a returned token.",
+                },
                 "mailbox_id": {"type": "integer", "description": "Exact mailbox_id from mail_list_mailboxes. Best for unambiguous mailbox targeting."},
                 "mailbox_ids": {
+                    "type": "array",
+                    "items": {"type": "integer"},
                     "description": "One or more exact mailbox IDs from mail_list_mailboxes.",
-                    "oneOf": [
-                        {"type": "array", "items": {"type": "integer"}},
-                        {"type": "string", "description": "Comma-separated mailbox IDs."},
-                    ],
                 },
                 "mailbox": {"type": "string", "description": "Fuzzy substring match against decoded Mail mailbox URL/path/name."},
                 "mailbox_name": {"type": "string", "description": "Exact case-insensitive mailbox display name, for example Inbox or Sent Mail."},
@@ -2651,10 +2696,9 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "subject": {"type": "string"},
                 "mailbox_id": {"type": "integer", "description": "Exact mailbox_id from mail_list_mailboxes."},
                 "mailbox_ids": {
-                    "oneOf": [
-                        {"type": "array", "items": {"type": "integer"}},
-                        {"type": "string", "description": "Comma-separated mailbox IDs."},
-                    ]
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "description": "One or more exact mailbox IDs from mail_list_mailboxes.",
                 },
                 "mailbox": {"type": "string", "description": "Fuzzy mailbox path/name/url filter."},
                 "mailbox_name": {"type": "string"},
@@ -2689,10 +2733,9 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "max_messages": {"type": "integer", "minimum": 1, "maximum": MAX_BODY_INDEX_LIMIT, "default": DEFAULT_BODY_INDEX_LIMIT},
                 "mailbox_id": {"type": "integer"},
                 "mailbox_ids": {
-                    "oneOf": [
-                        {"type": "array", "items": {"type": "integer"}},
-                        {"type": "string", "description": "Comma-separated mailbox IDs."},
-                    ]
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "description": "One or more exact mailbox IDs from mail_list_mailboxes.",
                 },
                 "mailbox_role": {
                     "type": "string",
@@ -2771,22 +2814,19 @@ TOOLS: dict[str, dict[str, Any]] = {
             "type": "object",
             "properties": {
                 "to": {
-                    "oneOf": [
-                        {"type": "array", "items": {"type": "string"}},
-                        {"type": "string", "description": "Comma-separated recipients."},
-                    ]
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Recipients. Runtime also accepts a comma-separated string for manual JSON-RPC calls.",
                 },
                 "cc": {
-                    "oneOf": [
-                        {"type": "array", "items": {"type": "string"}},
-                        {"type": "string", "description": "Comma-separated cc recipients."},
-                    ]
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Cc recipients. Runtime also accepts a comma-separated string for manual JSON-RPC calls.",
                 },
                 "bcc": {
-                    "oneOf": [
-                        {"type": "array", "items": {"type": "string"}},
-                        {"type": "string", "description": "Comma-separated bcc recipients."},
-                    ]
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Bcc recipients. Runtime also accepts a comma-separated string for manual JSON-RPC calls.",
                 },
                 "subject": {"type": "string"},
                 "body": {"type": "string", "description": "Alias for text_body."},
@@ -2818,7 +2858,6 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "visible": {"type": "boolean", "default": True, "description": "Ignored; drafts are always visible."},
             },
             "required": ["subject", "body"],
-            "anyOf": [{"required": ["to"]}, {"required": ["cc"]}, {"required": ["bcc"]}],
             "additionalProperties": False,
         },
         "handler": create_draft,

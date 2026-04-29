@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.1 - 2026-04-29
+
+- Fixed Codex native plugin loading by removing a top-level `anyOf` from `mail_create_draft`.
+- Removed nested `oneOf` unions from advertised tool schemas while preserving backward-compatible runtime parsing.
+- Added Gmail-style `max_results` and `next_page_token` pagination to `mail_search_messages`.
+- Added `mailbox_role` as a friendly alias for mailbox listing filters.
+- Added schema compatibility checks to tests and doctor output so unsupported tool-schema composition cannot silently break plugin discovery again.
+
 ## 0.6.0 - 2026-04-29
 
 - Added a copy/paste Codex install prompt at the top of the README.

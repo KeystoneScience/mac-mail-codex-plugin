@@ -37,6 +37,31 @@ def check_fts5() -> bool:
         conn.close()
 
 
+def schema_compatibility_issues(tools: dict[str, dict[str, Any]]) -> list[str]:
+    blocked_anywhere = {"anyOf", "oneOf", "allOf", "not"}
+    issues: list[str] = []
+
+    def walk(value: Any, path: str) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key in blocked_anywhere:
+                    issues.append(f"{path}.{key}")
+                walk(item, f"{path}.{key}")
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                walk(item, f"{path}[{index}]")
+
+    for tool_name, entry in tools.items():
+        schema = entry.get("inputSchema", {})
+        if schema.get("type") != "object":
+            issues.append(f"{tool_name}.type")
+        for key in ["anyOf", "oneOf", "allOf", "enum", "not"]:
+            if key in schema:
+                issues.append(f"{tool_name}.{key}")
+        walk(schema, tool_name)
+    return sorted(set(issues))
+
+
 def main() -> int:
     require_mail = "--require-mail" in sys.argv
     open_full_disk_access = "--open-full-disk-access" in sys.argv
@@ -70,6 +95,13 @@ def main() -> int:
         )
         tool_names = sorted(mm.TOOLS)
         add("tool_count", len(tool_names) >= 22, count=len(tool_names))
+        schema_issues = schema_compatibility_issues(mm.TOOLS)
+        add(
+            "codex_tool_schema_compatible",
+            not schema_issues,
+            issues=schema_issues,
+            note="Avoids root composition keywords and nested union combinators that can block Codex plugin loading.",
+        )
         add("has_permissions_tool", "mail_permissions_check" in mm.TOOLS)
         add("has_update_tools", {"mail_plugin_update_status", "mail_plugin_update_install"}.issubset(mm.TOOLS))
         add("has_purge_tool", "mail_purge_body_index" in mm.TOOLS)

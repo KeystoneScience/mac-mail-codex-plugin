@@ -4,6 +4,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import sqlite3
 import subprocess
 import tempfile
 import unittest
@@ -57,9 +58,28 @@ class MacMailMcpUnitTests(unittest.TestCase):
     def test_create_draft_schema_requires_a_recipient_bucket(self) -> None:
         schema = self.module.TOOLS["mail_create_draft"]["inputSchema"]
         self.assertEqual(schema["required"], ["subject", "body"])
-        self.assertIn("anyOf", schema)
-        self.assertIn({"required": ["to"]}, schema["anyOf"])
+        self.assertNotIn("anyOf", schema)
         self.assertEqual(schema["properties"]["to"]["minItems"], 1)
+        with self.assertRaisesRegex(self.module.ToolError, "recipient"):
+            self.module.create_draft({"subject": "Hello", "body": "Body"})
+
+    def test_tool_schemas_avoid_codex_rejected_composition_keywords(self) -> None:
+        blocked = {"anyOf", "oneOf", "allOf", "not"}
+
+        def walk(value, path):
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    self.assertNotIn(key, blocked, f"{path}.{key}")
+                    walk(item, f"{path}.{key}")
+            elif isinstance(value, list):
+                for index, item in enumerate(value):
+                    walk(item, f"{path}[{index}]")
+
+        for tool_name, entry in self.module.TOOLS.items():
+            schema = entry["inputSchema"]
+            self.assertEqual(schema.get("type"), "object", tool_name)
+            self.assertNotIn("enum", schema, tool_name)
+            walk(schema, tool_name)
 
     def test_search_schema_exposes_easy_mailbox_filters(self) -> None:
         props = self.module.TOOLS["mail_search_messages"]["inputSchema"]["properties"]
@@ -68,6 +88,69 @@ class MacMailMcpUnitTests(unittest.TestCase):
         self.assertIn("mailbox_name", props)
         self.assertIn("mailbox_path", props)
         self.assertIn("account", props)
+        self.assertIn("max_results", props)
+        self.assertIn("page_token", props)
+        self.assertIn("mailbox_role", self.module.TOOLS["mail_list_mailboxes"]["inputSchema"]["properties"])
+
+    def test_search_messages_supports_gmail_style_paging(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.executescript(
+            """
+            CREATE TABLE mailboxes (url TEXT, total_count INTEGER, unread_count INTEGER, deleted_count INTEGER);
+            CREATE TABLE messages (
+              message_id INTEGER,
+              conversation_id INTEGER,
+              date_received INTEGER,
+              date_sent INTEGER,
+              sender INTEGER,
+              subject INTEGER,
+              summary INTEGER,
+              mailbox INTEGER,
+              read INTEGER,
+              flagged INTEGER,
+              deleted INTEGER,
+              size INTEGER,
+              global_message_id INTEGER
+            );
+            CREATE TABLE addresses (address TEXT, comment TEXT);
+            CREATE TABLE subjects (subject TEXT);
+            CREATE TABLE summaries (summary TEXT);
+            CREATE TABLE message_global_data (message_id_header TEXT);
+            CREATE TABLE attachments (message INTEGER, attachment_id INTEGER, name TEXT);
+            """
+        )
+        conn.execute(
+            "INSERT INTO mailboxes(rowid, url, total_count, unread_count, deleted_count) VALUES (1, 'imap://acct/Inbox', 3, 3, 0)"
+        )
+        conn.execute("INSERT INTO addresses(rowid, address, comment) VALUES (1, 'sender@example.com', 'Sender')")
+        for index, subject in enumerate(["Newest", "Middle", "Oldest"], start=1):
+            conn.execute("INSERT INTO subjects(rowid, subject) VALUES (?, ?)", (index, subject))
+            conn.execute("INSERT INTO summaries(rowid, summary) VALUES (?, ?)", (index, subject))
+            conn.execute("INSERT INTO message_global_data(rowid, message_id_header) VALUES (?, ?)", (index, f'<{index}@example.com>'))
+            conn.execute(
+                """
+                INSERT INTO messages(
+                  rowid, message_id, conversation_id, date_received, date_sent, sender, subject,
+                  summary, mailbox, read, flagged, deleted, size, global_message_id
+                )
+                VALUES (?, ?, ?, ?, ?, 1, ?, ?, 1, 0, 0, 0, 100, ?)
+                """,
+                (index, index, index, 1000 + (4 - index), 1000 + (4 - index), index, index, index),
+            )
+        conn.commit()
+        try:
+            with mock.patch.object(self.module, "db_connect", return_value=conn):
+                first = self.module.search_messages({"mailbox_role": "inbox", "max_results": 2})
+                second = self.module.search_messages({"mailbox_role": "inbox", "page_token": first["next_page_token"], "max_results": 2})
+        finally:
+            conn.close()
+        self.assertEqual(first["count"], 2)
+        self.assertEqual([item["subject"] for item in first["messages"]], ["Newest", "Middle"])
+        self.assertEqual(first["next_page_token"], "2")
+        self.assertEqual(second["offset"], 2)
+        self.assertEqual(second["next_page_token"], None)
+        self.assertEqual([item["subject"] for item in second["messages"]], ["Oldest"])
 
     def test_new_tools_are_registered(self) -> None:
         for tool_name in [
