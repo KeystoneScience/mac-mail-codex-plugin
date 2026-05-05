@@ -4,7 +4,17 @@
   <img src="assets/readme-hero.png" alt="Blue gradient Mac Mail Codex plugin README hero" width="100%">
 </p>
 
-## Copy/Paste Install Prompt For Codex
+## Add The Codex Marketplace
+
+Run this in Codex or your terminal on a Mac:
+
+```bash
+codex plugin marketplace add KeystoneScience/mac-mail-codex-plugin --ref main
+```
+
+Then restart Codex, open the plugin picker, and install **Mac Mail** from the new marketplace. If Codex reports missing macOS permissions, grant Full Disk Access to Codex so it can read Apple Mail's local index. Mail.app Automation is only needed when you first create, open, or send a visible Mail draft.
+
+## Copy/Paste Manual Install Prompt For Codex
 
 Paste this into Codex on a Mac:
 

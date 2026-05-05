@@ -1,0 +1,21 @@
+{
+  "name": "mac-mail",
+  "interface": {
+    "displayName": "Mac Mail"
+  },
+  "plugins": [
+    {
+      "name": "mac-mail",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/KeystoneScience/mac-mail-codex-plugin.git",
+        "ref": "main"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
